@@ -5,8 +5,15 @@ Mass video conversion with ffmpeg using a bash script (only bash version right n
 # Install
 
 Make shure you have:  
+```
 bash, awk, ffmpeg
+```
 
 download the ffmpeg-script.sh from releases section:  
-https://codeberg.org/marvin1099/Ffmpeg-mass-video-conversion/releases
-
+https://codeberg.org/marvin1099/Ffmpeg-mass-video-conversion/releases  
+make the file executable  
+run it with the folders you want to convert use  
+```
+-help  
+```
+for script usage
