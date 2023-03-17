@@ -2,6 +2,8 @@
 
 Mass video conversion with ffmpeg using a bash script (only bash version right now, so just linux)
 
+Main Repo: https://codeberg.org/marvin1099/Ffmpeg-mass-video-conversion  
+Backup Repo: https://github.com/marvin1099/Ffmpeg-mass-video-conversion
 # Install
 
 Make shure you have:  
