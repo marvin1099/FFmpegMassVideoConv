@@ -12,15 +12,17 @@ import re
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Simple FFmpeg mass conversion tool\n"
-                    "To use only some of the default args use {a} {b} {c}",
-        epilog="The default config will result in the following output in the selected directories:\n"
-               "> ffmpeg -y -i FILEIN -c:v hevc_nvenc -rc constqp -qp 22 -c:a copy -map 0 FILEOUT",
+                    "To use only some of the default args use {a} {b} {c}\n"
+                    "For example for -v {b} will result in -qp",
+        epilog="The config will be named conversion-config.json and located in the currend conversion dir\n"
+               "The default config will result in the following command in the selected directories:\n"
+               "\tffmpeg -y -i FILEIN -c:v hevc_nvenc -rc constqp -qp 22 -c:a copy -map 0 FILEOUT",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument('-f', '--ffmpeg', default='ffmpeg', help='Set ffmpeg path (default: \'ffmpeg\')')
     parser.add_argument('-r', '--regex', nargs='+', default=['{a}', '{b}'], help='Regex to search for in file name (default: [\'.*\\.mp4$\',\'.*\\.mkv$\'])')
     parser.add_argument('-w', '--working-dir', dest="workingdir", default=None, help='Set the working directory')
-    parser.add_argument('-o', '--output', default="{n}-q22.{e}", help='Output file sting (default {n}-q22.{e})')
+    parser.add_argument('-o', '--output', default="{n}-q22.{e}", help='Output file sting, use {n}/{e} for the filename/extension (default {n}-q22.{e})')
     parser.add_argument('-s', '--start', nargs='+', default=['{a}'], help="The start of the FFmpeg command (default [\'-y\'])")
     parser.add_argument('-v', '--video-encoder', dest="video", nargs='+', default=['{a}', '{b}', '{c}'], help='Video encoder (default: [\'hevc_nvenc\',\'-qp\',\'22\'])')
     parser.add_argument('-a', '--audio-encoder', dest="audio", nargs='+', default=['{a}'], help='Audio encoder (default: [\'copy\'])')
