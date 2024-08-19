@@ -154,7 +154,7 @@ def video_tasker(videos, args):
                 else:
                     output = os.path.join(folder, details['output'])
                 ffmpeg_cmd = [args.ffmpeg] + args.start + ['-i', os.path.join(folder, video)] + args.video + args.audio + args.ending + [output]
-                print(f"\tRunning command:\n\"{'" "'.join(ffmpeg_cmd)}\"\n")
+                print(f"\tRunning command:\n{args.ffmpeg} '{'\'\''.join(ffmpeg_cmd[1:])}'\n")
                 result = subprocess.run(ffmpeg_cmd)
 
                 if result.returncode == 0:
