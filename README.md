@@ -3,7 +3,7 @@
 Mass video conversion with ffmpeg using a cross platform python script,  
 without any additonal python dependencies.
 
-Main Repo: https://codeberg.org/marvin1099/FFmpegMassVideoConv
+Main Repo: https://codeberg.org/marvin1099/FFmpegMassVideoConv  
 Backup Repo: https://github.com/marvin1099/FFmpegMassVideoConv
 
 # Dependencies
@@ -25,7 +25,7 @@ PATH/TO/FFmpegConv.py
 Relace PATH/TO/ with the path the FFmpegConv.py is at.
 
 Then it will show the usage (also at the bottom of the readme).  
-Then you just add the conversion directorys at the end and all of then will be converted 
+Then you just add the conversion directorys at the end and all of then will be converted. 
 
 ## Exaples
 ```
