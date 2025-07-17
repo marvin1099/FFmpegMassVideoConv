@@ -145,7 +145,7 @@ python FFmpegConv.py -c ~/.config/my_custom_settings.json -d /media/Videos
 Check [Placeholders in Arguments](#placeholders-in-arguments) On how the placeholders {a}, {b}, {c}, {n}, or {e} work.
 
 ```text
-usage: mass-convert.py [-h] [-c CONFIG_FILE] [-f FFMPEG] [-r REGEX [REGEX ...]] [-w WORKINGDIR] [-o OUTPUT] [-s START [START ...]]
+usage: FFmpegConv.py [-h] [-c CONFIG_FILE] [-f FFMPEG] [-r REGEX [REGEX ...]] [-w WORKINGDIR] [-o OUTPUT] [-s START [START ...]]
 [-v VIDEO [VIDEO ...]] [-a AUDIO [AUDIO ...]] [-e ENDING [ENDING ...]] [-d DIRECTORIES [DIRECTORIES ...]]
 [-x [REMOVE_FAILED]] [-X [REMOVE]] [-m MAXCONVERT] [-S SIMULATE]
 
