@@ -80,7 +80,7 @@ def parse_arguments():
     )
     # here declare --config-file again to make it show in --help
     parser.add_argument("-c", "--config-file", type=str, default=config_file,
-        help=f"Set the default settings file location (default; not stored): {default_config_file})")
+        help=f"Set the default settings file location (default; not stored: {default_config_file})")
 
     parser.add_argument('-f', '--ffmpeg', default=last_config.get('ffmpeg', 'ffmpeg'), help='Set ffmpeg path (default: \'ffmpeg\')')
     parser.add_argument('-r', '--regex', nargs='+', default=last_config.get('regex', ['{a}', '{b}']), help='Regex\'es to search for in file name (default: [\'.*\\.mp4$\',\'.*\\.mkv$\'])')
@@ -91,10 +91,10 @@ def parse_arguments():
     parser.add_argument('-a', '--audio-encoder', dest="audio", nargs='+', default=last_config.get('audio',['{a}']), help='Audio encoder (default: [\'copy\'])')
     parser.add_argument('-e', '--ending', nargs='+', default=last_config.get('ending', ['{a}', '{b}']), help='The end of the FFmpeg command (default=[\'-map\',\'0\'])')
     parser.add_argument('-d', '--directories', nargs='+', default=[], help='Explicitly specified directories to process')
-    parser.add_argument('-x', '--remove-failed', dest="remove_failed", type=str2bool, default=last_config.get('remove_failed', True), nargs='?', const=True, help='Enable to delete any file made by ffmpeg that resulted in an error')
-    parser.add_argument('-X', '--remove', type=str2bool, default=last_config.get('remove', False), nargs='?', const=True, help='Enable deletion of original files (WARNING: THEY WONT BE RECOVERABLE)')
+    parser.add_argument('-x', '--remove-failed', dest="remove_failed", type=str2bool, default=last_config.get('remove_failed', True), nargs='?', const=True, help='Set off by using FALSE to disable deleting any file made by ffmpeg that resulted in an error')
+    parser.add_argument('-X', '--remove', type=str2bool, default=last_config.get('remove', False), nargs='?', const=True, help='Enable deletion of original files with TRUE (WARNING: THEY WONT BE RECOVERABLE)')
     parser.add_argument('-m', '--maxconvert', type=int, default=last_config.get('maxconvert', -1), help='Maximum number of videos to convert before exiting (default: unlimited; set via -1)')
-    parser.add_argument('-S', '--simulate', type=str2bool, default=last_config.get('simulate', True), help='Simulate prosseing (wont mark tasks as done)')
+    parser.add_argument('-S', '--simulate', type=str2bool, default=last_config.get('simulate', True), help='Simulate prosseing with TRUE (wont mark tasks as pending, failed, canceled or completed)')
 
     args, unknown_args = parser.parse_known_args()
 
