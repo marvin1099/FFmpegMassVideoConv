@@ -94,6 +94,7 @@ def parse_arguments():
     parser.add_argument('-x', '--remove-failed', dest="remove_failed", type=str2bool, default=last_config.get('remove_failed', True), nargs='?', const=True, help='Enable to delete any file made by ffmpeg that resulted in an error')
     parser.add_argument('-X', '--remove', type=str2bool, default=last_config.get('remove', False), nargs='?', const=True, help='Enable deletion of original files (WARNING: THEY WONT BE RECOVERABLE)')
     parser.add_argument('-m', '--maxconvert', type=int, default=last_config.get('maxconvert', -1), help='Maximum number of videos to convert before exiting (default: unlimited; set via -1)')
+    parser.add_argument('-S', '--simulate', type=str2bool, default=last_config.get('simulate', True), help='Simulate prosseing (wont mark tasks as done)')
 
     args, unknown_args = parser.parse_known_args()
 
@@ -254,7 +255,10 @@ def video_tasker(videos, args):
     if not worker_uuid:
         raise NameError("Error getting own worker uuid")
 
+    simulate = args.simulate
+    stats = [0,0,0]
     KeyInterrupt = False
+    print("---\n")
     for folder, folder_videos in videos.items():
         config, config_path = acquire_lock(folder)
 
@@ -293,10 +297,16 @@ def video_tasker(videos, args):
                 if config[video]['status'] in ['todo', 'failed', 'killed', 'canceled']:
                     # Update output if the new format is different
                     if config[video]['output'] != details['output']:
-                        config[video]['output'] = details['output']
+                        if simulate:
+                            print(f"The output name of {details['output']} would be changed to {config[video]['output']} here, if not simulated.")
+                        else:
+                            config[video]['output'] = details['output']
 
         loaded_config, config_path = load_folder_config(folder)
         config = deep_merge(loaded_config, override)
+        if simulate and loaded_config != config:
+            print("\n---\n")
+
         override[LOCK_KEY] = time.time()
         save_folder_config(config, config_path)
 
@@ -313,13 +323,16 @@ def video_tasker(videos, args):
                 try:
                     inputfile = os.path.join(folder, video)
                     if not os.path.isfile(inputfile):
-                        print(f"Warning video file '{inputfile}' could not be found, skipping file...")
+                        print(f"Warning video file '{inputfile}' could not be found, skipping file...\n\n --- \n")
                         continue
 
                     override[video] = {}
-                    override[video]['worker'] = worker_pid
-                    override[video]['worker_uuid'] = worker_uuid
-                    override[video]['status'] = 'pending'
+                    if not simulate:
+                        override[video]['worker'] = worker_pid
+                        override[video]['worker_uuid'] = worker_uuid
+                        override[video]['status'] = 'pending'
+                    else:
+                        print(f"Video {video} would be registered (if not simulation) by:\n- pid {worker_pid} and uuid {worker_uuid}.")
                     if Locked:
                         loaded_config, config_path = acquire_lock(folder)
                         Locked = False
@@ -338,59 +351,105 @@ def video_tasker(videos, args):
 
                     ffmpeg_cmd = [args.ffmpeg] + args.start + ['-i', inputfile] + args.video + args.audio + args.ending + [output]
 
-                    print(f"\tRunning command:\n{args.ffmpeg} '{'\' \''.join(ffmpeg_cmd[1:])}'\n")
+                    print(f"\n* {"Simulation" if simulate else "Running"} command:\n{args.ffmpeg} '{'\' \''.join(ffmpeg_cmd[1:])}'\n")
                 except KeyboardInterrupt:
                     KeyInterrupt = True
                 except Exception as e:
-                    print(f"Error unknown Exception {e}, Exiting")
-                    exit()
+                    print(f"Error unknown Exception {e}, may Result in problems skipping file.")
+                    continue
                 try:
                     if not KeyInterrupt:
-                        result = subprocess.run(ffmpeg_cmd)
+                        if simulate:
+                            if isinstance(simulate, bool):
+                                simulate = [0,0,0]
+
+                            print("- - -\n- The ffmpeg command would run at this point -")
+                            if simulate[1] == 0 and len(config) > 1:
+                                s = 1
+                            elif simulate[2] == 0 and len(config) > 2:
+                                s = 2
+                            else:
+                                s = 3
+                            if s <= 2:
+                                if s <= 1:
+                                    print("- Simulating Failed task -")
+                                    result = subprocess.CompletedProcess(ffmpeg_cmd, returncode=1)
+                                    print("- - -")
+                                    simulate[1] += 1
+                                else:
+                                    print("- Simulating Canceled task -")
+                                    print("- - -")
+                                    simulate[2] += 1
+                                    raise KeyboardInterrupt
+                            else:
+                                print("- Simulating Completed task -")
+                                print("- - -")
+                                simulate[0] += 1
+                                result = subprocess.CompletedProcess(ffmpeg_cmd, returncode=0)
+                        else:
+                            result = subprocess.run(ffmpeg_cmd)
                     else:
-                        result = 1
+                        result = subprocess.CompletedProcess(ffmpeg_cmd, returncode=1)
                         KeyInterrupt = True
                 except KeyboardInterrupt:
-                    result = 1
+                    result = subprocess.CompletedProcess(ffmpeg_cmd, returncode=1)
                     KeyInterrupt = True
                 except Exception as e:
-                    result = 1
+                    result = subprocess.CompletedProcess(ffmpeg_cmd, returncode=1)
                 try:
-                    if result == 1 or result.returncode != 0:
+                    if result.returncode != 0:
                         # Mark task as failed
-                        override[video]['status'] = 'canceled' if KeyInterrupt else 'failed'
-                        print(f"\n\tConversion failed for {video}. Return code: {"130" if KeyInterrupt else "1" if result == 1 else result.returncode}\n")
+                        if simulate:
+                            print(f"\n* The Simulated task was reported as {'canceled' if KeyInterrupt else 'failed'} on video {video}.")
+                        else:
+                            override[video]['status'] = 'canceled' if KeyInterrupt else 'failed'
+                            print(f"\n* Conversion failed for {video}. Return code: {"130" if KeyInterrupt else result.returncode}\n")
+                            if KeyInterrupt:
+                                stats[2] += 1
+                            else:
+                                stats[1] += 1
 
                         if args.remove_failed:
-                            if os.path.isfile(output):
+                            if simulate:
+                                print(f"\nHere the output file {output} for the failed task would be deleted, if not simulated.")
+                            elif os.path.isfile(output):
                                 os.remove(output)
                             else:
-                                print(f"Warning could not delete broken output file, as file '{output}' was not found")
+                                print(f"\nWarning could not delete broken output file, as file '{output}' was not found.")
                         if args.remove:
-                            print("Skipping removal of the original file, as the task has failed")
+                            print("\nSkipping removal of the original file, as the task has failed.")
                     else:
-                        # Mark task as completed
-                        override[video]['status'] = 'completed'
-                        print(f"\n\tConversion successful for {video}\n")
+                        if simulate:
+                            print(f"\n* The Simulated task was selected as successful for video {video}.")
+                        else:
+                            # Mark task as completed
+                            override[video]['status'] = 'completed'
+                            print(f"\n\tConversion successful for {video}\n")
+                            stats[0] += 1
 
                         if args.remove:
-                            if os.path.isfile(inputfile):
+                            if simulate:
+                                print(f"\nHere the original file {video} for the finished task would be deleted, if not simulated.")
+                            elif os.path.isfile(inputfile):
                                 os.remove(inputfile)
                             else:
-                                print("Warning could not delete original video, as it was not found")
+                                print("\nWarning could not delete original video, as it was not found.")
 
                         if maxconvert > 0:
                             maxconvert -= 1
 
-                    override[video]['worker'] = None
-                    override[video]['worker_uuid'] = None
+                    if simulate:
+                        print(f"\nHere the the task on {video} would be marked as owned by nobody and saved, if not simulated.")
+                    else:
+                        override[video]['worker'] = None
+                        override[video]['worker_uuid'] = None
 
-                    loaded_config, config_path = acquire_lock(folder)
-                    Locked = False
-                    override[LOCK_KEY] = 0
-                    config = deep_merge(loaded_config, override)
-                    Locked = True
-                    save_folder_config(config, config_path)
+                        loaded_config, config_path = acquire_lock(folder)
+                        Locked = False
+                        override[LOCK_KEY] = 0
+                        config = deep_merge(loaded_config, override)
+                        Locked = True
+                        save_folder_config(config, config_path)
                 except KeyboardInterrupt:
                     KeyInterrupt = True
                     break
@@ -398,11 +457,18 @@ def video_tasker(videos, args):
                     break
 
                 if KeyInterrupt:
-                    raise KeyboardInterrupt
+                    if simulate:
+                        print("\nAt this point the script would usually exit as tasks are canceled by KeyboardInterrupts, skipped for simulation")
+                        KeyInterrupt = False
+                    else:
+                        raise KeyboardInterrupt
 
-            if maxconvert == 0:
-                print(f"Max Convert amount of {args.maxconvert} reached")
-                break
+                if maxconvert == 0:
+                    print(f"Max Convert amount of {args.maxconvert} reached.")
+                    print("\n---\n")
+                    break
+
+                print("\n---\n")
 
         if not Locked:
             loaded_config, config_path = load_folder_config(folder)
@@ -412,10 +478,20 @@ def video_tasker(videos, args):
             save_folder_config(config, config_path)
 
         if KeyInterrupt:
-            raise KeyboardInterrupt
+            if simulate:
+                pass
+            else:
+                print("Tasks where stopped early")
+                print(f"Conversion Stats: Completed: {stats[0]}; Failed: {stats[1]}; Canceled: {stats[2]}")
+                raise KeyboardInterrupt
 
-    print("\nAll Tasks where Finished")
-
+    print("All Tasks where Finished")
+    if simulate and isinstance(simulate, bool):
+        simulate = [0,0,0]
+    if simulate:
+        print(f"Simulation Stats: Completed: {simulate[0]}; Failed: {simulate[1]}; Canceled: {simulate[2]}")
+    else:
+        print(f"Conversion Stats: Completed: {stats[0]}; Failed: {stats[1]}; Canceled: {stats[2]}")
 
 def main():
     args = parse_arguments()
