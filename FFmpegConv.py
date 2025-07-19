@@ -266,11 +266,11 @@ def video_tasker(videos, args):
         override = {}
         for video, details in config.items():
             if isinstance(details, dict) and details['status'] == 'pending':
-                worker_pid = details.get('worker')
+                worker_pid_old = details.get('worker')
                 worker_uuid_old = details.get('worker_uuid')
 
-                if not worker_uuid_old or (worker_uuid_old and worker_uuid_old == worker_uuid):
-                    if not is_worker_active(int(worker_pid)):
+                if not worker_uuid_old or worker_uuid_old == worker_uuid:
+                    if not worker_pid_old or not is_worker_active(int(worker_pid_old)):
                         override[video] = {}
                         override[video]['status'] = 'killed'
                         override[video]['worker'] = None
