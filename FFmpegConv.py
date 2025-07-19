@@ -288,10 +288,11 @@ def video_tasker(videos, args):
         save_folder_config(config, config_path)
 
         # Merge new videos with existing config
+        override = {}
         for video, details in folder_videos.items():
             if video not in config:
                 # New video, add to config
-                config[video] = details
+                override[video] = details
             else:
                 # Video exists in config
                 if config[video]['status'] in ['todo', 'failed', 'killed', 'canceled']:
@@ -300,7 +301,7 @@ def video_tasker(videos, args):
                         if simulate:
                             print(f"The output name of {details['output']} would be changed to {config[video]['output']} here, if not simulated.")
                         else:
-                            config[video]['output'] = details['output']
+                            override[video]['output'] = details['output']
 
         loaded_config, config_path = load_folder_config(folder)
         config = deep_merge(loaded_config, override)
