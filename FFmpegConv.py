@@ -326,7 +326,7 @@ def video_tasker(videos, args):
                 continue
             else:
                 details = loaded_config[video]
-                if isinstance(details, dict)
+                if isinstance(details, dict):
                     details = dict(details)
 
             if maxconvert == 0:
