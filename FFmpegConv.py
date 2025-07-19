@@ -315,7 +315,20 @@ def video_tasker(videos, args):
         Locked = False
         maxconvert = int(args.maxconvert)
         # Process videos
-        for video, details in config.items():
+        for video in list(config):
+            if Locked:
+                loaded_config, config_path = acquire_lock(folder)
+                Locked = False
+            else:
+                loaded_config, config_path = load_folder_config(folder)
+
+            if not loaded_config.get(video):
+                continue
+            else:
+                details = loaded_config[video]
+                if isinstance(details, dict)
+                    details = dict(details)
+
             if maxconvert == 0:
                 print(f"Max Convert amount of {args.maxconvert} reached")
                 break
@@ -335,11 +348,6 @@ def video_tasker(videos, args):
                         override[video]['status'] = 'pending'
                     else:
                         print(f"Video {video} would be registered (if not simulation) by:\n- pid {worker_pid} and uuid {worker_uuid}.")
-                    if Locked:
-                        loaded_config, config_path = acquire_lock(folder)
-                        Locked = False
-                    else:
-                        loaded_config, config_path = load_folder_config(folder)
 
                     override[LOCK_KEY] = 0
                     config = deep_merge(loaded_config, override)
