@@ -297,6 +297,7 @@ def video_tasker(videos, args):
                 # Video exists in config
                 if config[video]['status'] in ['todo', 'failed', 'killed', 'canceled']:
                     # Update output if the new format is different
+                    override[video] = {}
                     if config[video]['output'] != details['output']:
                         if simulate:
                             print(f"The output name of {details['output']} would be changed to {config[video]['output']} here, if not simulated.")
