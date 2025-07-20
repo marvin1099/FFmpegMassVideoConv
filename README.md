@@ -129,7 +129,7 @@ python FFmpegConv.py -m 5 -d /media/Videos
 Simulate without converting:
 
 ```bash
-python FFmpegConv.py -S -d /media/Videos
+python FFmpegConv.py -S TRUE -d /media/Videos
 ```
 
 Use a custom config:
