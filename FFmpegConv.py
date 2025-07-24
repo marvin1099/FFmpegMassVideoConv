@@ -71,7 +71,7 @@ def parse_arguments():
     last_config_copy = dict(last_config)
     parser = argparse.ArgumentParser(
         description="Simple FFmpeg mass conversion tool\n"
-                    "To use only some of the default args use {a} {b} {c}\n"
+                    "To use only some of the default args use {a} {b} {c} {d}\n"
                     "For example for -v {a} {b} will result in -qp 22",
         epilog="The config will be named conversion-config.json and located in the currend conversion dir\n"
                "The default config will result in the following command in the selected directories:\n"
@@ -89,12 +89,14 @@ def parse_arguments():
     parser.add_argument('-s', '--start', nargs='+', default=last_config.get('start', ['{a}']), help="The start of the FFmpeg command (default [\'-y\'])")
     parser.add_argument('-v', '--video-encoder', dest="video", nargs='+', default=last_config.get('video', ['{a}', '{b}', '{c}']), help='Video encoder (default: [\'hevc_nvenc\',\'-qp\',\'22\'])')
     parser.add_argument('-a', '--audio-encoder', dest="audio", nargs='+', default=last_config.get('audio',['{a}']), help='Audio encoder (default: [\'copy\'])')
-    parser.add_argument('-e', '--ending', nargs='+', default=last_config.get('ending', ['{a}', '{b}']), help='The end of the FFmpeg command (default=[\'-map\',\'0\'])')
+    parser.add_argument('-e', '--ending', nargs='+', default=last_config.get('ending', ['{a}', '{b}', '{c}', '{d}']), help='The end of the FFmpeg command (default=[\'-map\',\'0\',\'-map_metadata\', \'0\'])')
     parser.add_argument('-d', '--directories', nargs='+', default=[], help='Explicitly specified directories to process')
     parser.add_argument('-x', '--remove-failed', dest="remove_failed", type=str2bool, default=last_config.get('remove_failed', True), nargs='?', const=True, help='Set off by using FALSE to disable deleting any file made by ffmpeg that resulted in an error')
     parser.add_argument('-X', '--remove', type=str2bool, default=last_config.get('remove', False), nargs='?', const=True, help='Enable deletion of original files with TRUE (WARNING: THEY WONT BE RECOVERABLE)')
     parser.add_argument('-m', '--maxconvert', type=int, default=last_config.get('maxconvert', -1), help='Maximum number of videos to convert before exiting (default: unlimited; set via -1)')
     parser.add_argument('-S', '--simulate', type=str2bool, default=last_config.get('simulate', True), help='Simulate prosseing with TRUE (wont mark tasks as pending, failed, canceled or completed)')
+    parser.add_argument('-k', '--keep-stats', dest="stat", type=str2bool, default=last_config.get('stat', True), help='Keep the video modified time and read time as it was (default: True)')
+
 
     args, unknown_args = parser.parse_known_args()
 
@@ -119,7 +121,7 @@ def parse_arguments():
             args.video = ["-c:v"] + [arg.format(a="hevc_nvenc",b="-qp",c="22") for arg in args.video]
         if args.audio:
             args.audio = ["-c:a"] + [arg.format(a="copy") for arg in args.audio]
-        args.ending = [arg.format(a="-map",b="0") for arg in args.ending]
+        args.ending = [arg.format(a="-map",b="0",c="-map_metadata",d="0") for arg in args.ending]
 
         return args
     else:
@@ -256,6 +258,7 @@ def video_tasker(videos, args):
         raise NameError("Error getting own worker uuid")
 
     simulate = args.simulate
+    use_stat = args.stat
     stats = [0,0,0]
     KeyInterrupt = False
     print("---\n")
@@ -316,6 +319,7 @@ def video_tasker(videos, args):
         maxconvert = int(args.maxconvert)
         # Process videos
         for video in list(config):
+            stat = None
             if Locked:
                 loaded_config, config_path = acquire_lock(folder)
                 Locked = False
@@ -361,11 +365,14 @@ def video_tasker(videos, args):
 
                     ffmpeg_cmd = [args.ffmpeg] + args.start + ['-i', inputfile] + args.video + args.audio + args.ending + [output]
 
+                    stat = os.stat(inputfile)
                     print(f"\n* {"Simulation" if simulate else "Running"} command:\n{args.ffmpeg} '{'\' \''.join(ffmpeg_cmd[1:])}'\n")
                 except KeyboardInterrupt:
                     KeyInterrupt = True
                 except Exception as e:
                     print(f"Error unknown Exception {e}, may Result in problems skipping file.")
+                    if use_stat and stat:
+                        os.utime(inputfile, (stat.st_atime, stat.st_mtime))
                     continue
                 try:
                     if not KeyInterrupt:
@@ -428,6 +435,9 @@ def video_tasker(videos, args):
                                 print(f"\nWarning could not delete broken output file, as file '{output}' was not found.")
                         if args.remove:
                             print("\nSkipping removal of the original file, as the task has failed.")
+                        
+                        if use_stat and stat:
+                            os.utime(inputfile, (stat.st_atime, stat.st_mtime))
                     else:
                         if simulate:
                             print(f"\n* The Simulated task was selected as successful for video {video}.")
@@ -436,6 +446,10 @@ def video_tasker(videos, args):
                             override[video]['status'] = 'completed'
                             print(f"\n\tConversion successful for {video}\n")
                             stats[0] += 1
+
+                        if use_stat and stat:
+                            os.utime(inputfile, (stat.st_atime, stat.st_mtime))
+                            os.utime(output, (stat.st_atime, stat.st_mtime))
 
                         if args.remove:
                             if simulate:
