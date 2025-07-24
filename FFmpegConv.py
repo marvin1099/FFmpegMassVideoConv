@@ -436,8 +436,6 @@ def video_tasker(videos, args):
                         if args.remove:
                             print("\nSkipping removal of the original file, as the task has failed.")
                         
-                        if use_stat and stat:
-                            os.utime(inputfile, (stat.st_atime, stat.st_mtime))
                     else:
                         if simulate:
                             print(f"\n* The Simulated task was selected as successful for video {video}.")
@@ -446,11 +444,7 @@ def video_tasker(videos, args):
                             override[video]['status'] = 'completed'
                             print(f"\n\tConversion successful for {video}\n")
                             stats[0] += 1
-
-                        if use_stat and stat:
-                            os.utime(inputfile, (stat.st_atime, stat.st_mtime))
-                            os.utime(output, (stat.st_atime, stat.st_mtime))
-
+                            
                         if args.remove:
                             if simulate:
                                 print(f"\nHere the original file {video} for the finished task would be deleted, if not simulated.")
@@ -461,6 +455,12 @@ def video_tasker(videos, args):
 
                         if maxconvert > 0:
                             maxconvert -= 1
+
+                    if use_stat and stat:
+                        if os.path.isfile(output):
+                            os.utime(output, (stat.st_atime, stat.st_mtime))
+                        if os.path.isfile(inputfile):
+                            os.utime(inputfile, (stat.st_atime, stat.st_mtime))
 
                     if simulate:
                         print(f"\nHere the the task on {video} would be marked as owned by nobody and saved, if not simulated.")
