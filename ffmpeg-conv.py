@@ -1002,11 +1002,24 @@ class FolderProcessor:
             and isinstance(config.get(name), dict)
             and config[name].get("status") in WORKABLE_STATUSES
         ]
+        # In simulation mode with 4+ tasks, skip exactly one file to exercise
+        # the skipped-path code.  Only do this when max_convert is unlimited
+        # or high enough that we have room (>= 4) so the skip logic is visible.
+        if (self.sim is not None and len(names) >= 4
+                and (self.args.max_convert == -1 or self.args.max_convert >= 4)):
+            self.max_left = len(names) - 3
         for i, name in enumerate(names):
             if self.max_left == 0:
                 remaining = len(names) - i
-                print(f"  Max conversions reached ({self.args.max_convert} total)."
-                      f" Skipping {remaining} remaining file(s) in this folder.\n")
+                if self.sim is not None:
+                    for skip_idx in range(i, len(names)):
+                        print(f"  [sim] Skipping '{names[skip_idx]}' "
+                              f"(intentional — tests the skipped path)")
+                else:
+                    print(f"  Max conversions reached "
+                          f"({self.args.max_convert} total)."
+                          f" Skipping {remaining} remaining file(s)"
+                          f" in this folder.\n")
                 self.counters["skipped"] += remaining
                 break
 
@@ -1016,6 +1029,10 @@ class FolderProcessor:
                     self.interrupted = True
                 else:  # "max_reached"
                     self.max_reached = True
+                    if self.sim is not None:
+                        for skip_idx in range(i + 1, len(names)):
+                            print(f"  [sim] Skipping '{names[skip_idx]}' "
+                                  f"(intentional — tests the skipped path)")
                 # Count every workable task we never started as skipped
                 self.counters["skipped"] += len(names) - i - 1
                 break
@@ -1042,6 +1059,8 @@ class FolderProcessor:
         print(f"  Status: {outcome}\n---\n")
 
         if outcome == "canceled":
+            if self.sim is not None:
+                return None   # intentional simulation test — continue
             return "canceled"
         if outcome == "completed" and self.max_left > 0:
             self.max_left -= 1
