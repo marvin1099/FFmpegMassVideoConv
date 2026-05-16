@@ -106,10 +106,10 @@ python ffmpeg-conv.py -A nas-share //nas/videos /mnt/videos
 python ffmpeg-conv.py -L
 
 # Activate one or more for this run
-python ffmpeg-conv.py -P nas-share /your/target/dir
+python ffmpeg-conv.py -P nas-share -d /your/target/dir
 
 # Activate all saved translations
-python ffmpeg-conv.py -U /your/target/dir
+python ffmpeg-conv.py -U -d /your/target/dir
 ```
 
 Use `-p` to prefer local paths (skip translation if the path already exists locally).
@@ -129,7 +129,7 @@ SMB shares often block `os.utime()`. When this happens, the script saves a backl
 To exclusively retry the backlog without starting any conversions:
 
 ```bash
-python ffmpeg-conv.py -t true /your/target/dir
+python ffmpeg-conv.py -t true -d /your/target/dir
 ```
 
 This lets a separate script (e.g., a cron job that remounts with different options) fix timestamps quickly.
@@ -153,49 +153,49 @@ python ffmpeg-conv.py /media/Videos /media/Movies
 Change output filename style:
 
 ```bash
-python ffmpeg-conv.py -o {n}-q22.mp4 /media/Videos
+python ffmpeg-conv.py -o {n}-q22.mp4 -d /media/Videos
 ```
 
 Use custom codec settings (the placeholder {a}):
 
 ```bash
-python ffmpeg-conv.py -v libx264 {b} 18 /media/Videos
+python ffmpeg-conv.py -v libx264 {b} 18 -d /media/Videos
 ```
 
 Override only part of a default list with `^` escape:
 
 ```bash
-python ffmpeg-conv.py -e ^-map 0 ^-map_metadata 0 ^-c:s copy /media/Videos
+python ffmpeg-conv.py -e ^-map 0 ^-map_metadata 0 ^-c:s copy -d /media/Videos
 ```
 
 Limit to 5 files per run:
 
 ```bash
-python ffmpeg-conv.py -m 5 /media/Videos
+python ffmpeg-conv.py -m 5 -d /media/Videos
 ```
 
 Simulate without converting (one-off, not saved):
 
 ```bash
-python ffmpeg-conv.py -n /media/Videos
+python ffmpeg-conv.py -n -d /media/Videos
 ```
 
 Simulate (saved in config):
 
 ```bash
-python ffmpeg-conv.py -S true /media/Videos
+python ffmpeg-conv.py -S true -d /media/Videos
 ```
 
 Use a custom config:
 
 ```bash
-python ffmpeg-conv.py -c ~/.config/my_custom_settings.json /media/Videos
+python ffmpeg-conv.py -c ~/.config/my_custom_settings.json -d /media/Videos
 ```
 
 Retry timestamp backlog only (no conversions):
 
 ```bash
-python ffmpeg-conv.py -t true /media/Videos
+python ffmpeg-conv.py -t true -d /media/Videos
 ```
 
 ---
