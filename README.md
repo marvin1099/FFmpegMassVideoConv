@@ -195,7 +195,7 @@ python ffmpeg-conv.py -c ~/.config/my_custom_settings.json -d /media/Videos
 Retry timestamp backlog only (no conversions):
 
 ```bash
-python ffmpeg-conv.py -t true -d /media/Videos
+python ffmpeg-conv.py -t true
 ```
 
 ---
@@ -250,7 +250,7 @@ Behaviour:
   -t, --timestamp-backlog-only [Yes or No]  Retry backlog and exit
 ```
 
-Default FFmpeg command:
+Default Generated FFmpeg command:
 ```text
 ffmpeg -y -i INPUT -c:v hevc_nvenc -qp 22 -c:a copy -map 0 -map_metadata 0 OUTPUT
 ```
@@ -272,7 +272,7 @@ Each run saves conversion results per folder in the config file named `conversio
 
 ---
 
-## Timestamp Backlog (`\0timestamp_backlog`)
+## Timestamp Backlog
 
 When `os.utime()` fails (common on SMB shares), the script stores an entry in the shared config:
 
