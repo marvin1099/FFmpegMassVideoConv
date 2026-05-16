@@ -35,6 +35,9 @@ LOCK_POLL_BASE   = 0.25   # base polling interval (seconds)
 # \0 is illegal in filenames on every OS — this key can never collide with a
 # real video entry in the task config.  Valid JSON, impossible as a path.
 LOCK_KEY = '\0lock'
+# Same null-byte trick for the timestamp backlog — \0 can never appear in a
+# real filename, so this key is safe in the shared task config.
+TIMESTAMP_BACKLOG_KEY = '\0timestamp_backlog'
 
 # Statuses from which a task can be picked up and worked on
 WORKABLE_STATUSES = {"todo", "failed", "killed", "canceled"}
@@ -468,7 +471,7 @@ def build_parser(saved: dict, default_config_path: Path) -> argparse.ArgumentPar
             "list arguments:  -e ^-map 0 ^-map_metadata 0\n"
         ),
         epilog=(
-            "Default FFmpeg command:\n"
+            "Default Generated FFmpeg command:\n"
             "  ffmpeg -y -i INPUT -c:v hevc_nvenc -qp 22"
             " -c:a copy -map 0 -map_metadata 0 OUTPUT"
         ),
@@ -484,7 +487,7 @@ def build_parser(saved: dict, default_config_path: Path) -> argparse.ArgumentPar
     g = p.add_argument_group("Directories")
     g.add_argument("directories", nargs="*", metavar="DIR",
                    help="Target directories (positional)")
-    g.add_argument("-d", "--dir", dest="extra_dirs", nargs="+", metavar="DIR",
+    g.add_argument("-d", "--dirs", dest="extra_dirs", nargs="+", metavar="DIR",
                    default=[],
                    help="Additional target directories (flag form)")
     g.add_argument("-w", "--working-dir", dest="workingdir", metavar="PATH",
@@ -495,7 +498,7 @@ def build_parser(saved: dict, default_config_path: Path) -> argparse.ArgumentPar
         "Path translation  (multi-PC / different mount points)\n"
         "\n"
         "Translations are stored by name in your local settings file.\n"
-        "Use -PA to add/update, -PR to remove, -PL to list, -P to activate.\n"
+        "Use -A to add/update, -R to remove, -L to list, -P to activate.\n"
         "\n"
         "'remote' is the path as written into the shared task config.\n"
         "'local'  is how this machine accesses the same files.\n"
@@ -503,19 +506,19 @@ def build_parser(saved: dict, default_config_path: Path) -> argparse.ArgumentPar
         "Use -p to prefer local paths globally (saved in config).\n"
         "When enabled, translation is skipped if the local path already exists.\n"
     )
-    g.add_argument("-PA", "--path-add", dest="path_add",
+    g.add_argument("-A", "--path-add", dest="path_add",
                    nargs="+", metavar="ARG",
                    help=(
                        "Add or update a saved translation:\n"
-                       "  -PA NAME REMOTE LOCAL\n"
-                       "Example:  -PA nas-share //nas/videos /mnt/videos\n"
+                       "  -A NAME REMOTE LOCAL\n"
+                       "Example:  -A nas-share //nas/videos /mnt/videos\n"
                        "Use -p to set prefer-local globally for all rules."
                    ))
-    g.add_argument("-PR", "--path-remove", dest="path_remove",
+    g.add_argument("-R", "--path-remove", dest="path_remove",
                    nargs="+", metavar="NAME",
                    help="Remove saved translation(s) by name:\n"
-                        "  -PR nas-share  or  -PR nas-share ssd-output")
-    g.add_argument("-PL", "--path-list", dest="path_list",
+                        "  -R nas-share  or  -R nas-share ssd-output")
+    g.add_argument("-L", "--path-list", dest="path_list",
                    action="store_true", default=False,
                    help="List all saved translations and exit")
     g.add_argument("-P", "--path-use", dest="path_use",
@@ -525,13 +528,13 @@ def build_parser(saved: dict, default_config_path: Path) -> argparse.ArgumentPar
                        "Activate specific saved translations by name for this run.\n"
                        "  -P nas-share\n"
                        "  -P nas-share ssd-output\n"
-                       "To activate all saved translations, use -PU instead."
+                       "To activate all saved translations, use -U instead."
                    ))
-    g.add_argument("-PU", "--path-use-all", dest="path_use_all",
+    g.add_argument("-U", "--path-use-all", dest="path_use_all",
                    action="store_true", default=False,
                    help="Activate all saved translations for this run")
     g.add_argument("-p", "--prefer-local", dest="prefer_local",
-                   type=str2bool, nargs="?", const=True,
+                   type=str2bool, nargs="?", const=True, metavar="Yes or No",
                    default=saved.get("prefer_local", False),
                    help="Skip path translation when the local path already exists\n"
                         "(saved in config)")
@@ -540,7 +543,7 @@ def build_parser(saved: dict, default_config_path: Path) -> argparse.ArgumentPar
     g.add_argument("-f", "--ffmpeg", metavar="BIN",
                    default=saved.get("ffmpeg", "ffmpeg"),
                    help="Path to ffmpeg binary  (default: ffmpeg)")
-    g.add_argument("--input-flags", dest="input_flags", action="append",
+    g.add_argument("-i", "--input-flags", dest="input_flags", action="append",
                    metavar="FLAG", default=None,
                    help=(
                        "Flag(s) inserted before the input file  (default: -i)\n"
@@ -583,27 +586,31 @@ def build_parser(saved: dict, default_config_path: Path) -> argparse.ArgumentPar
 
     g = p.add_argument_group("Behaviour")
     g.add_argument("-x", "--remove-failed", dest="remove_failed",
-                   type=str2bool, nargs="?", const=True,
+                   type=str2bool, nargs="?", const=True, metavar="Yes or No",
                    default=saved.get("remove_failed", True),
                    help="Remove partial output after a failed conversion  (default: on)")
     g.add_argument("-X", "--remove-original", dest="remove_original",
-                   type=str2bool, nargs="?", const=True,
+                   type=str2bool, nargs="?", const=True, metavar="Yes or No",
                    default=saved.get("remove_original", False),
                    help="Delete source file after success  (IRREVERSIBLE; default: off)")
     g.add_argument("-m", "--max-convert", dest="max_convert", type=int,
                    default=saved.get("max_convert", -1),
                    help="Stop after N successful conversions per run  (-1 = unlimited)")
     g.add_argument("-S", "--simulate",
-                   type=str2bool, nargs="?", const=True,
+                   type=str2bool, nargs="?", const=True, metavar="Yes or No",
                    default=saved.get("simulate", False),
                    help="Simulate mode (saved in config). Use -S True or -S False.\n"
                         "For one-off simulation without saving, use --dry-run.")
-    g.add_argument("--dry-run", action="store_true", default=False,
+    g.add_argument("-n", "--dry-run", action="store_true", default=False,
                    help="Simulate this run only (not saved). Overrides -S.")
     g.add_argument("-k", "--keep-timestamps", dest="keep_timestamps",
-                   type=str2bool, nargs="?", const=True,
+                   type=str2bool, nargs="?", const=True, metavar="Yes or No",
                    default=saved.get("keep_timestamps", True),
                    help="Preserve source file timestamps on output  (default: on)")
+    g.add_argument("-t", "--timestamp-backlog-only", dest="timestamp_backlog_only",
+                   type=str2bool, nargs="?", const=True, metavar="Yes or No",
+                   default=saved.get("timestamp_backlog_only", False),
+                   help="Process timestamp backlog and exit (no conversions)")
 
     return p
 
@@ -620,6 +627,47 @@ def _parse_path_add(raw: list[str], prefer_local_flag: bool) -> PathMap:
                    local=raw[2], prefer_local=prefer_local_flag)
 
 
+def with_json(path: Path) -> Path:
+    return path.with_suffix(path.suffix or ".json") if path.suffix else Path(str(path) + ".json")
+
+
+def resolve_config_path(raw: str | None, user_dir: Path, default_config_path: Path) -> Path:
+    if not raw:
+        return default_config_path
+
+    p = Path(raw)
+    # 1) exact path as given
+    if p.exists():
+        return p
+
+    # 2) try given + .json
+    given_json = with_json(p)
+    if given_json.exists():
+        return given_json
+
+    # 3) try relative to user dir (preserve any suffix)
+    rel = user_dir / raw
+    if rel.exists():
+        return rel
+
+    # 4) try user_dir / (given + .json)
+    rel_json = with_json(rel)
+    if rel_json.exists():
+        return rel_json
+
+    # 5) if raw still given
+    if raw:
+        # and p is not in a subfolder place in conf folder
+        if os.sep not in raw:
+            candidate = user_dir / raw
+        # otherwise just use as given
+        else:
+            candidate = p
+        return with_json(candidate) if not candidate.exists() else candidate
+
+    return default_config_path
+
+
 def parse_arguments() -> tuple[argparse.Namespace, list[PathMap], PathTranslator]:
     """
     Returns (args, saved_maps, translator).
@@ -633,11 +681,12 @@ def parse_arguments() -> tuple[argparse.Namespace, list[PathMap], PathTranslator
     pre.add_argument("-c", "--config-file", default=None)
     pre_args, _ = pre.parse_known_args()
 
-    default_config_path = get_user_config_dir() / USER_CONFIG_NAME
-    config_path = (Path(pre_args.config_file)
-                   if pre_args.config_file else default_config_path)
+    config_dir = get_user_config_dir()
+    default_config_path = config_dir / USER_CONFIG_NAME
 
-    saved      = load_user_settings(config_path)
+    config_path = resolve_config_path(pre_args.config_file, config_dir, default_config_path)
+
+    saved = load_user_settings(config_path)
     saved_copy = dict(saved)
 
     parser = build_parser(saved, default_config_path)
@@ -830,6 +879,11 @@ class FolderProcessor:
     # ── Public entry point ────────────────────────────────────────────────────
 
     def run(self) -> None:
+        self._process_timestamp_backlog()
+
+        if self.args.timestamp_backlog_only:
+            return
+
         found = self._discover_tasks()
         if not found:
             print("  No matching files found.\n")
@@ -981,8 +1035,8 @@ class FolderProcessor:
         # All post-run steps run regardless of outcome so the config is always
         # written cleanly before we propagate any interrupt.
         self._handle_cleanup(outcome, local_input, local_output)
-        self._restore_timestamps(local_input, local_output)
-        self._finalise_task(name, live_details["output"], outcome)
+        backlog_entry = self._restore_timestamps(local_input, local_output)
+        self._finalise_task(name, live_details["output"], outcome, backlog_entry)
         self._record(outcome)
 
         print(f"  Status: {outcome}\n---\n")
@@ -1079,22 +1133,46 @@ class FolderProcessor:
             self._remove_file(local_input, "original",
                               f"Would remove original: {local_input}")
 
-    def _restore_timestamps(self, local_input: Path, local_output: Path) -> None:
+    def _restore_timestamps(self, local_input: Path,
+                            local_output: Path) -> Optional[dict]:
+        """
+        Restore atime/mtime from the source file onto the output (and input if
+        it still exists).  Returns a backlog entry on failure, or None on
+        success / when timestamps are disabled.
+        """
         if not self.args.keep_timestamps or self.sim is not None:
-            return
+            return None
         try:
             stat  = os.stat(local_input)
             times = (stat.st_atime, stat.st_mtime)
-            for target in (local_output, local_input):
-                if target.is_file():
-                    try:
-                        os.utime(target, times)
-                    except OSError:
-                        pass
         except OSError:
-            pass
+            return None          # source gone — nothing to restore
 
-    def _finalise_task(self, name: str, stored_output: str, outcome: str) -> None:
+        any_failed = False
+        for target in (local_output, local_input):
+            if target.is_file():
+                try:
+                    os.utime(target, times)
+                except OSError:
+                    any_failed = True
+
+        if not any_failed:
+            return None
+
+        # Prefer to record the output path because it is the file that matters
+        # most (the newly created file whose timestamp should match the source).
+        store_path = (local_output if local_output.is_file()
+                      else local_input if local_input.is_file()
+                      else None)
+        if store_path is None:
+            return None          # neither file still exists
+        return {
+            "before_translated_path": str(store_path),
+            "set_to_unix": times[1],
+        }
+
+    def _finalise_task(self, name: str, stored_output: str, outcome: str,
+                       backlog_entry: Optional[dict] = None) -> None:
         """Write the final task status back to the shared config."""
         if self.sim is not None:
             print(f"  [sim] Would write status='{outcome}' for '{name}'\n")
@@ -1110,12 +1188,66 @@ class FolderProcessor:
             "worker_pid":  None,
             "timestamp":   None,
         }
+        # Update the timestamp backlog (list of dicts)
+        backlog = final.get(TIMESTAMP_BACKLOG_KEY)
+        if backlog_entry is not None:
+            if not isinstance(backlog, list):
+                backlog = []
+            backlog.append(backlog_entry)
+            final[TIMESTAMP_BACKLOG_KEY] = backlog
         self._release(final)
 
     def _record(self, outcome: str) -> None:
         self.counters[outcome] = self.counters.get(outcome, 0) + 1
         if self.sim is not None:
             self.sim.record(outcome)
+
+    # ── Timestamp backlog ─────────────────────────────────────────────────────
+
+    def _process_timestamp_backlog(self) -> bool:
+        """
+        Process all entries in the timestamp backlog.
+
+        For each entry, try os.utime() on the stored path.  If it succeeds,
+        remove the entry.  If it fails, keep the entry and move on.
+
+        Returns True if any backlog entry was processed (even if failed),
+        False if the backlog was empty or skipped.
+        """
+        try:
+            config = self._acquire()
+        except TimeoutError:
+            print("  Warning: could not acquire lock to process timestamp "
+                  "backlog.\n")
+            return False
+
+        backlog = config.get(TIMESTAMP_BACKLOG_KEY)
+        if not isinstance(backlog, list) or not backlog:
+            self._release(config)
+            return False
+
+        print(f"  Processing timestamp backlog ({len(backlog)} entry/entries)...")
+        remaining = []
+        for entry in backlog:
+            path = entry.get("before_translated_path", "")
+            unix_ts = entry.get("set_to_unix")
+            if not path or not isinstance(unix_ts, (int, float)):
+                continue
+            try:
+                os.utime(path, (unix_ts, unix_ts))
+                print(f"    Restored timestamp: {path}")
+            except OSError as e:
+                print(f"    Still blocked ({e}): {path}")
+                remaining.append(entry)
+
+        changed = len(remaining) != len(backlog)
+        if changed:
+            if remaining:
+                config[TIMESTAMP_BACKLOG_KEY] = remaining
+            else:
+                config.pop(TIMESTAMP_BACKLOG_KEY, None)
+        self._release(config)
+        return True
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
