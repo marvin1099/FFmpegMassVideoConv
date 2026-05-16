@@ -393,12 +393,20 @@ class SimulateState:
     Intentional fails/cancels are clearly labelled in output.
     """
 
-    def __init__(self, total_tasks: int):
+    def __init__(self, total_tasks: int, max_convert: int = -1):
         self.total     = total_tasks
         self.index     = 0
         self.completed = 0
         self.failed    = 0
         self.canceled  = 0
+
+        if total_tasks >= 4 and (max_convert == -1 or max_convert >= 4):
+            intention = total_tasks - 1
+            effective = min(max_convert, intention) if max_convert != -1 else intention
+        else:
+            effective = min(max_convert, total_tasks) if max_convert != -1 else total_tasks
+
+        self._expected_skips = total_tasks - effective
 
         if total_tasks == 1:
             self._sequence = ["completed"]
@@ -428,10 +436,21 @@ class SimulateState:
             print("[sim] Outcome plan: 1 video -> success\n")
         elif self.total == 2:
             print("[sim] Outcome plan: 2 videos -> fail, success\n")
-        else:
-            print(f"[sim] Outcome plan: {self.total} videos -> "
-                  f"fail, cancel, then {self.total - 2}x success\n"
+        elif self.total == 3:
+            print("[sim] Outcome plan: 3 videos -> fail, cancel, success\n"
                   "[sim] (Intentional fail/cancel exercise all status paths.)\n")
+        else:
+            n_completes = self.total - 2
+            n_skips = self._expected_skips
+            n_done = n_completes - n_skips
+            if n_skips > 0:
+                print(f"[sim] Outcome plan: {self.total} videos -> "
+                      f"fail, cancel, then {n_done}x success, {n_skips}x skipped\n"
+                      "[sim] (Intentional fail/cancel/skip exercise all status paths.)\n")
+            else:
+                print(f"[sim] Outcome plan: {self.total} videos -> "
+                      f"fail, cancel, then {n_completes}x success\n"
+                      "[sim] (Intentional fail/cancel exercise all status paths.)\n")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -874,6 +893,7 @@ class FolderProcessor:
         self.counters: dict[str, int] = {"completed": 0, "failed": 0, "canceled": 0, "skipped": 0}
         self.interrupted  = False   # True when Ctrl+C was caught
         self.max_reached  = False   # True when --max-convert limit was hit
+        self.max_reached_was_sim_skip = False  # True when simulation skipped intentionally
         self.max_left     = args.max_convert  # -1 = unlimited
 
     # ── Public entry point ────────────────────────────────────────────────────
@@ -1002,19 +1022,26 @@ class FolderProcessor:
             and isinstance(config.get(name), dict)
             and config[name].get("status") in WORKABLE_STATUSES
         ]
-        # In simulation mode with 4+ tasks, skip exactly one file to exercise
-        # the skipped-path code.  Only do this when max_convert is unlimited
-        # or high enough that we have room (>= 4) so the skip logic is visible.
-        if (self.sim is not None and len(names) >= 4
-                and (self.args.max_convert == -1 or self.args.max_convert >= 4)):
-            self.max_left = len(names) - 3
+        if self.sim is None and self.args.simulate:
+            self.sim = SimulateState(len(names), self.args.max_convert)
+            self.sim.print_legend()
+        if self.sim is not None and len(names) >= 4:
+            if self.args.max_convert == -1 or self.args.max_convert >= 4:
+                if self.args.max_convert != -1:
+                    self.max_left = min(self.args.max_convert, len(names) - 1)
+                    self.max_reached_was_sim_skip = (self.args.max_convert >= len(names) - 1)
+                else:
+                    self.max_left = len(names) - 1
+                    self.max_reached_was_sim_skip = True
         for i, name in enumerate(names):
             if self.max_left == 0:
                 remaining = len(names) - i
                 if self.sim is not None:
                     for skip_idx in range(i, len(names)):
-                        print(f"  [sim] Skipping '{names[skip_idx]}' "
-                              f"(intentional — tests the skipped path)")
+                        label = ("(intentional — tests the skipped path)"
+                                 if self.max_reached_was_sim_skip
+                                 else "")
+                        print(f"  [sim] Skipping '{names[skip_idx]}' {label}".rstrip())
                 else:
                     print(f"  Max conversions reached "
                           f"({self.args.max_convert} total)."
@@ -1031,8 +1058,10 @@ class FolderProcessor:
                     self.max_reached = True
                     if self.sim is not None:
                         for skip_idx in range(i + 1, len(names)):
-                            print(f"  [sim] Skipping '{names[skip_idx]}' "
-                                  f"(intentional — tests the skipped path)")
+                            label = ("(intentional — tests the skipped path)"
+                                     if self.max_reached_was_sim_skip
+                                     else "")
+                            print(f"  [sim] Skipping '{names[skip_idx]}' {label}".rstrip())
                 # Count every workable task we never started as skipped
                 self.counters["skipped"] += len(names) - i - 1
                 break
@@ -1058,14 +1087,18 @@ class FolderProcessor:
 
         print(f"  Status: {outcome}\n---\n")
 
+        if self.max_left > 0:
+            if self.sim is not None:
+                self.max_left -= 1
+            elif outcome == "completed":
+                self.max_left -= 1
+            if self.max_left == 0:
+                return "max_reached"
+
         if outcome == "canceled":
             if self.sim is not None:
                 return None   # intentional simulation test — continue
             return "canceled"
-        if outcome == "completed" and self.max_left > 0:
-            self.max_left -= 1
-            if self.max_left == 0:
-                return "max_reached"
         return None
 
     def _claim_task(
@@ -1339,6 +1372,7 @@ def main() -> int:
     total: dict[str, int] = {"completed": 0, "failed": 0, "canceled": 0, "skipped": 0}
     interrupted = False   # Ctrl+C was caught
     max_reached = False   # --max-convert limit was hit
+    sim_skip = False      # simulation intentional skip
 
     for raw_folder in args.directories:
         folder = Path(raw_folder)
@@ -1356,12 +1390,7 @@ def main() -> int:
 
         sim: Optional[SimulateState] = None
         if args.simulate:
-            try:
-                n = sum(1 for f in os.listdir(folder)
-                        if any(re.match(p, f) for p in args.regex))
-            except OSError:
-                n = 1
-            sim = SimulateState(max(n, 1))
+            sim = None  # created later with the real task count
 
         processor = FolderProcessor(folder, args, m_uuid, pid, sim)
         processor.run()
@@ -1372,6 +1401,7 @@ def main() -> int:
         if processor.interrupted or processor.max_reached:
             interrupted = processor.interrupted
             max_reached = processor.max_reached
+            sim_skip = processor.max_reached_was_sim_skip
             # loop continues to count skipped tasks in remaining folders
 
     # ── Summary ───────────────────────────────────────────────────────────────
@@ -1379,7 +1409,13 @@ def main() -> int:
     if interrupted:
         print(f"{prefix}Stopped early (interrupted).")
     elif max_reached:
-        print(f"{prefix}Stopped after reaching --max-convert limit ({args.max_convert}).")
+        if args.simulate:
+            print()
+        if sim_skip:
+            print(f"{prefix}Stopped (intentional skip — all status paths tested).")
+        else:
+            print(f"{prefix}Stopped after reaching --max-convert limit "
+                  f"({args.max_convert}).")
     else:
         print(f"{prefix}All tasks finished.")
     skipped_str = f"  skipped: {total['skipped']}" if total['skipped'] else ""
