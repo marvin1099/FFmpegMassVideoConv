@@ -458,7 +458,7 @@ def unescape_values(values: list[str]) -> list[str]:
 
 def build_parser(saved: dict, default_config_path: Path) -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="FFmpegConv.py",
+        prog="ffmpeg-conv.py",
         description=(
             "Mass FFmpeg video converter with multi-PC shared-drive support.\n"
             "\n"
